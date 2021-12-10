@@ -21,36 +21,22 @@ type Handler struct {
 
 type Handle interface {
 	handle(connection net.Conn)
-	GET(req *http.Request, respW *bufio.Writer)
 }
 
 func (s Handler) handle(handlerID string, connection net.Conn) {
 	fmt.Println("#SYS Connection:", connection.RemoteAddr().String(), "GoRoutine:", handlerID)
 	rw := bufio.NewReadWriter(bufio.NewReader(connection), bufio.NewWriter(connection))
+
 	req, Reqerr := http.ReadRequest(rw.Reader)
 	if Reqerr != nil {
 		log.Println("Error!", "GoRoutine:  -", handlerID, "-", Reqerr)
 		return
 	}
-
-	switch req.Method {
-	case "GET":
-		s.GET(req, rw.Writer)
-	}
+	connection := req.Header.Get("Connection")
 
 	connection.Close()
 	fmt.Println("#SYS Complete!", "GoRoutine:", handlerID, "→ Closed")
 	fmt.Println(strings.Repeat("-", 50))
-}
-
-func (s Handler) GET(req *http.Request, respW *bufio.Writer) {
-	fmt.Printf("req.Method: %v\n", req.Method)
-	fmt.Printf("req.RequestURI: %v\n", req.RequestURI)
-	fmt.Printf("req.Proto: %v\n", req.Proto)
-	fmt.Println(req.ProtoMajor, req.ProtoMinor)
-	for k, v := range req.Header {
-		fmt.Println(k, v)
-	}
 }
 
 func InitHandling(routingMap map[string]string) *Handler {
@@ -63,6 +49,7 @@ func InitHandling(routingMap map[string]string) *Handler {
 //TCP Server
 func TCPServer(addr string, port int) bool {
 	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", addr, port))
+	//tls.Listen("tcp",fmt.Sprintf("%s:%d", addr, port))
 	if err != nil {
 		log.Println("server starting err", err)
 		return false
