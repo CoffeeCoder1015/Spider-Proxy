@@ -1,7 +1,17 @@
 package main
 
+import (
+	"net/http"
+	"os"
+)
+
 //TODO -  RENAME PACKAGE
 
 func main() {
-	TCPServer("", 8080)
+	s := SpiderServer{}
+	s.HandleFunc("/", func(req http.Request) []byte {
+		file, _ := os.ReadFile("content/index.html")
+		return file
+	})
+	s.TCPServer("", 8080)
 }

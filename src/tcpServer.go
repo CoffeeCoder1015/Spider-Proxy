@@ -7,11 +7,17 @@ import (
 	"strconv"
 )
 
+type ServerCore interface {
+	TCPServer(addr string, port int) bool
+}
+
 type SpiderServer struct {
+	ServerCore
+	Handler
 }
 
 //TCP Server
-func TCPServer(addr string, port int) bool {
+func (s *SpiderServer) TCPServer(addr string, port int) bool {
 	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", addr, port))
 	if err != nil {
 		log.Println("server starting err", err)

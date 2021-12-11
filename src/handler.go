@@ -18,7 +18,7 @@ type Handler struct {
 
 type HandleOperators interface {
 	handle(connection net.Conn)
-	routeMapper(URL string, hunfc func(req http.Request))
+	HandleFunc(route string, hfunc func(req http.Request) []byte)
 }
 
 func (s Handler) handle(handlerID string, connection net.Conn) {
@@ -54,6 +54,10 @@ func (s Handler) handle(handlerID string, connection net.Conn) {
 	connection.Close()
 	fmt.Println("#SYS Complete!", "GoRoutine:", handlerID, "→ Closed")
 	fmt.Println(strings.Repeat("-", 50))
+}
+
+func (s *Handler) HandleFunc(route string, hfunc func(req http.Request) []byte) {
+	s.RouteMap[route] = hfunc
 }
 
 func InitHandling() *Handler {
