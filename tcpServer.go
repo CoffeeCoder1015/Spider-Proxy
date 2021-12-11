@@ -7,10 +7,8 @@ import (
 	"strconv"
 )
 
-/*
-Init stage obj var
-calls on init var
-*/
+type SpiderServer struct {
+}
 
 //TCP Server
 func TCPServer(addr string, port int) bool {

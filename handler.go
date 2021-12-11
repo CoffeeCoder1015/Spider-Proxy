@@ -11,10 +11,12 @@ import (
 )
 
 type Handler struct {
+	HandleOperators
+
 	RouteMap map[string]interface{}
 }
 
-type Handle interface {
+type HandleOperators interface {
 	handle(connection net.Conn)
 	routeMapper(URL string, hunfc func(req http.Request))
 }
