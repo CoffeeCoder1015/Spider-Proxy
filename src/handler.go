@@ -2,11 +2,13 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"os"
+	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -21,7 +23,8 @@ type HandleOperators interface {
 	HandleFunc(route string, hfunc func(req http.Request) []byte)
 }
 
-func (s Handler) handle(handlerID string, connection net.Conn) {
+func (s Handler) handle(connection net.Conn) {
+	handlerID := getGID()
 	fmt.Println("#SYS Connection:", connection.RemoteAddr().String(), "GoRoutine:", handlerID)
 	rw := bufio.NewReadWriter(bufio.NewReader(connection), bufio.NewWriter(connection))
 
@@ -36,21 +39,6 @@ func (s Handler) handle(handlerID string, connection net.Conn) {
 		fmt.Println(k, v)
 	}
 
-	//Connection - handling
-	if req.Header.Get("Connection") == "keep-alive" {
-		for {
-			kaReq, krqErr := http.ReadRequest(rw.Reader)
-			if krqErr != nil {
-				log.Println("Error!", "GoRoutine:  -", handlerID, "-", krqErr)
-			}
-			fmt.Println(kaReq.Method, kaReq.Proto)
-			fmt.Println("Req url:", kaReq.RequestURI, "Requested content: ")
-			for k, v := range kaReq.Header {
-				fmt.Println("KA Loop", handlerID, k, v)
-			}
-		}
-	}
-
 	connection.Close()
 	fmt.Println("#SYS Complete!", "GoRoutine:", handlerID, "→ Closed")
 	fmt.Println(strings.Repeat("-", 50))
@@ -60,15 +48,12 @@ func (s *Handler) HandleFunc(route string, hfunc func(req http.Request) []byte) 
 	s.RouteMap[route] = hfunc
 }
 
-func InitHandling() *Handler {
-	handleStart := new(Handler)
-	handleStart.RouteMap = map[string]interface{}{}
-	handleStart.RouteMap["CNF"] = func(req http.Request) []byte {
-		contentNotFoundFile, cnffReaderr := os.ReadFile("CNF.html")
-		if cnffReaderr != nil {
-			log.Panicln("ReadErr:", cnffReaderr)
-		}
-		return contentNotFoundFile
-	}
-	return handleStart
+//debug
+func getGID() uint64 {
+	b := make([]byte, 64)
+	b = b[:runtime.Stack(b, false)]
+	b = bytes.TrimPrefix(b, []byte("goroutine "))
+	b = b[:bytes.IndexByte(b, ' ')]
+	n, _ := strconv.ParseUint(string(b), 10, 64)
+	return n
 }

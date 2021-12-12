@@ -8,7 +8,7 @@ import (
 //TODO -  RENAME PACKAGE
 
 func main() {
-	s := SpiderServer{}
+	s := NewServer()
 	s.HandleFunc("/", func(req http.Request) []byte {
 		file, _ := os.ReadFile("content/index.html")
 		return file

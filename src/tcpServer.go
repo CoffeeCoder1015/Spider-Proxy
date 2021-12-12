@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"strconv"
+	"net/http"
+	"os"
 )
 
 type ServerCore interface {
@@ -23,15 +24,25 @@ func (s *SpiderServer) TCPServer(addr string, port int) bool {
 		log.Println("server starting err", err)
 		return false
 	}
-	HStart := InitHandling()
-	Hid := 0
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			log.Println(err)
 			return false
 		}
-		go HStart.handle(strconv.FormatInt(int64(Hid), 10), conn)
-		Hid++
+		go s.handle(conn)
 	}
+}
+
+func NewServer() *SpiderServer {
+	Serv := new(SpiderServer)
+	Serv.RouteMap = make(map[string]interface{})
+	Serv.RouteMap["CNF"] = func(req http.Request) []byte {
+		contentNotFoundFile, cnffReaderr := os.ReadFile("CNF.html")
+		if cnffReaderr != nil {
+			log.Panicln("ReadErr:", cnffReaderr)
+		}
+		return contentNotFoundFile
+	}
+	return Serv
 }
