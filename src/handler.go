@@ -4,23 +4,31 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
+
+var fullStatusCode = map[int]string{
+	200: "200 OK",
+	404: "404 Not Found",
+}
 
 type Handler struct {
 	HandleOperators
 
-	RouteMap map[string]interface{}
+	RouteMap map[string]func(http.Request) []byte
 }
 
 type HandleOperators interface {
 	handle(connection net.Conn)
 	HandleFunc(route string, hfunc func(req http.Request) []byte)
+	UpdateStatus(statusCode int) string
 }
 
 func (s Handler) handle(connection net.Conn) {
@@ -29,15 +37,61 @@ func (s Handler) handle(connection net.Conn) {
 	fmt.Println("#SYS Connection:", connection.RemoteAddr().String(), "GoRoutine:", handlerID)
 	rw := bufio.NewReadWriter(bufio.NewReader(connection), bufio.NewWriter(connection))
 
-	req, Reqerr := http.ReadRequest(rw.Reader)
-	if Reqerr != nil {
-		log.Println("Error!", "GoRoutine:  -", handlerID, "-", Reqerr)
-		return
-	}
-	fmt.Println(req.Method, req.Proto)
-	fmt.Println("Req url:", req.RequestURI, "Requested content:", s.RouteMap[req.RequestURI])
-	for k, v := range req.Header {
-		fmt.Println(k, v)
+	//keep-alive trackers
+	startTime := time.Now()
+	requestsLeft := 100
+	timeOut := 5
+
+	//request inwards
+	for {
+		req, Reqerr := http.ReadRequest(rw.Reader)
+
+		elap := time.Since(startTime).Seconds()
+		if elap >= float64(timeOut) {
+			break
+		}
+
+		if Reqerr != nil {
+			log.Println("Error!", "GoRoutine:  -", handlerID, "-", Reqerr)
+			return
+		}
+		fmt.Println(req.Proto, req.RequestURI)
+		for k, v := range req.Header {
+			fmt.Println(k, v)
+		}
+
+		RStatusCode := 200
+		RStatus := fullStatusCode[RStatusCode]
+
+		//body retrive
+		respBody := []byte{}
+		if k, v := s.RouteMap[req.RequestURI]; v {
+			respBody = k(*req)
+		} else {
+			respBody = s.RouteMap["CNF"](*req)
+			RStatusCode, RStatus = s.UpdateStatus(404)
+		}
+
+		header := make(map[string][]string)
+
+		Resp := &http.Response{
+			Status:        RStatus,
+			StatusCode:    RStatusCode,
+			Proto:         "HTTP/1.1",
+			ProtoMajor:    1,
+			ProtoMinor:    1,
+			Body:          io.NopCloser(bytes.NewBuffer(respBody)),
+			ContentLength: int64(len(respBody)),
+			Header:        header,
+		}
+
+		req.Response = Resp
+		req.Response.Write(rw.Writer)
+		rw.Flush()
+
+		if req.Close {
+			break
+		}
 	}
 	connection.Close()
 	fmt.Println("#SYS Complete!", "GoRoutine:", handlerID, "→ Closed")
@@ -45,8 +99,11 @@ func (s Handler) handle(connection net.Conn) {
 }
 
 func (s *Handler) HandleFunc(route string, hfunc func(req http.Request) []byte) {
-	rm := make(map[string]func(http.Request) []byte)
-	rm[route] = hfunc
+	s.RouteMap[route] = hfunc
+}
+
+func (Handler) UpdateStatus(statusCode int) (int, string) {
+	return statusCode, fullStatusCode[statusCode]
 }
 
 //debug

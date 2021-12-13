@@ -36,9 +36,9 @@ func (s *SpiderServer) TCPServer(addr string, port int) bool {
 
 func NewServer() *SpiderServer {
 	Serv := new(SpiderServer)
-	Serv.RouteMap = make(map[string]interface{})
+	Serv.RouteMap = make(map[string]func(http.Request) []byte)
 	Serv.RouteMap["CNF"] = func(req http.Request) []byte {
-		contentNotFoundFile, cnffReaderr := os.ReadFile("CNF.html")
+		contentNotFoundFile, cnffReaderr := os.ReadFile("content/CNF.html")
 		if cnffReaderr != nil {
 			log.Panicln("ReadErr:", cnffReaderr)
 		}

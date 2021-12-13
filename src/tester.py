@@ -1,5 +1,13 @@
 import requests
 
-sess = requests.session()
-sess.get("http://localhost:8080",headers={"Connection":"keep-alive"})
-sess.post("http://localhost:8080",data="HELLO WORLD")
+tUrl = "https:/"
+
+def proxyTest():
+    proxy = {
+        "http":"http://localhost:8080"
+    }
+    r = requests.get(tUrl,proxies=proxy)
+    requests.request()
+    print(r.content)
+
+proxyTest()
