@@ -39,7 +39,7 @@ func (s Handler) handle(connection net.Conn) {
 
 	//keep-alive trackers
 	startTime := time.Now()
-	requestsLeft := 100
+	requestsLeft := 6
 	timeOut := 5
 
 	//request inwards
@@ -55,9 +55,9 @@ func (s Handler) handle(connection net.Conn) {
 			log.Println("Error!", "GoRoutine:  -", handlerID, "-", Reqerr)
 			return
 		}
-		fmt.Println(req.Proto, req.RequestURI)
+		fmt.Println(req.Proto, req.Method, req.RequestURI)
 		for k, v := range req.Header {
-			fmt.Println(k, v)
+			fmt.Println("	", k, v)
 		}
 
 		RStatusCode := 200
@@ -74,6 +74,13 @@ func (s Handler) handle(connection net.Conn) {
 
 		header := make(map[string][]string)
 
+		//h - connection
+		ConnHeader := req.Header.Get("Connection")
+		if ConnHeader == "keep-alive" {
+			header["Connection"] = []string{"keep-alive"}
+			header["Keep-Alive"] = []string{fmt.Sprintf("timeout=%d, max=%d", timeOut, requestsLeft)}
+		}
+
 		Resp := &http.Response{
 			Status:        RStatus,
 			StatusCode:    RStatusCode,
@@ -84,12 +91,13 @@ func (s Handler) handle(connection net.Conn) {
 			ContentLength: int64(len(respBody)),
 			Header:        header,
 		}
-
 		req.Response = Resp
 		req.Response.Write(rw.Writer)
 		rw.Flush()
 
-		if req.Close {
+		requestsLeft--
+
+		if ConnHeader == "close" || requestsLeft == 0 {
 			break
 		}
 	}
