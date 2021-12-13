@@ -25,6 +25,7 @@ type HandleOperators interface {
 
 func (s Handler) handle(connection net.Conn) {
 	handlerID := getGID()
+	fmt.Println(strings.Repeat("-", 50))
 	fmt.Println("#SYS Connection:", connection.RemoteAddr().String(), "GoRoutine:", handlerID)
 	rw := bufio.NewReadWriter(bufio.NewReader(connection), bufio.NewWriter(connection))
 
@@ -34,18 +35,18 @@ func (s Handler) handle(connection net.Conn) {
 		return
 	}
 	fmt.Println(req.Method, req.Proto)
-	fmt.Println("Req url:", req.RequestURI, "Requested content: ")
+	fmt.Println("Req url:", req.RequestURI, "Requested content:", s.RouteMap[req.RequestURI])
 	for k, v := range req.Header {
 		fmt.Println(k, v)
 	}
-
 	connection.Close()
 	fmt.Println("#SYS Complete!", "GoRoutine:", handlerID, "→ Closed")
 	fmt.Println(strings.Repeat("-", 50))
 }
 
 func (s *Handler) HandleFunc(route string, hfunc func(req http.Request) []byte) {
-	s.RouteMap[route] = hfunc
+	rm := make(map[string]func(http.Request) []byte)
+	rm[route] = hfunc
 }
 
 //debug
