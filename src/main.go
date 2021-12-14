@@ -17,5 +17,9 @@ func main() {
 		file, _ := os.ReadFile("content/stuff.js")
 		return file
 	})
+	s.HandleFunc("/CloseButton.png", func(req http.Request) []byte {
+		file, _ := os.ReadFile("content/CloseButton.png")
+		return file
+	})
 	s.TCPServer("", 8080)
 }

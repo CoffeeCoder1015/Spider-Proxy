@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -28,7 +27,6 @@ type Handler struct {
 type HandleOperators interface {
 	handle(connection net.Conn)
 	HandleFunc(route string, hfunc func(req http.Request) []byte)
-	UpdateStatus(statusCode int) string
 }
 
 func (s Handler) handle(connection net.Conn) {
@@ -38,69 +36,77 @@ func (s Handler) handle(connection net.Conn) {
 	rw := bufio.NewReadWriter(bufio.NewReader(connection), bufio.NewWriter(connection))
 
 	//keep-alive trackers
-	startTime := time.Now()
-	requestsLeft := 6
+	requestsLeft := 100
 	timeOut := 5
-
-	//request inwards
+	tOutInDura := time.Duration(timeOut) * time.Second
+	reqChan := make(chan *http.Request)
+KeepAliveLoop:
 	for {
-		req, Reqerr := http.ReadRequest(rw.Reader)
 
-		elap := time.Since(startTime).Seconds()
-		if elap >= float64(timeOut) {
-			break
+		go func() {
+			req, Reqerr := http.ReadRequest(rw.Reader)
+			if Reqerr != nil {
+				log.Println("Error!", "GoRoutine:  -", handlerID, "-", Reqerr)
+			}
+			reqChan <- req
+		}()
+
+		select {
+		case req := <-reqChan:
+			//data disp
+			fmt.Println(req.Proto, req.Method, req.RequestURI)
+			for k, v := range req.Header {
+				fmt.Println("	", k, v)
+			}
+			fmt.Println(time.Now())
+			fmt.Println("	", strings.Repeat("-", 20))
+
+			RStatus := fullStatusCode[200]
+
+			//body retrive
+			respBody := []byte{}
+			if k, v := s.RouteMap[req.RequestURI]; v {
+				respBody = k(*req)
+			} else {
+				respBody = s.RouteMap["CNF"](*req)
+				RStatus = fullStatusCode[404]
+			}
+
+			header := make(map[string]string)
+			//h - date
+			location, _ := time.LoadLocation("GMT")
+			header["Date"] = time.Now().In(location).String()
+			//h - server prod
+			header["Server"] = "Spider Server (bV12)"
+			//h - cont length
+			header["Content-Length"] = strconv.FormatInt(int64(len(respBody)), 10)
+
+			//h - connection
+			ConnHeader := req.Header.Get("Connection")
+			if ConnHeader == "keep-alive" {
+				header["Connection"] = "keep-alive"
+				header["Keep-Alive"] = fmt.Sprintf("timeout=%d, max=%d", timeOut, requestsLeft)
+			}
+
+			RespBlk := []string{"HTTP/1.1 " + RStatus}
+			for k, v := range header {
+				RespBlk = append(RespBlk, fmt.Sprintf("%s: %s", k, v))
+			}
+			Resp := strings.Join(RespBlk, "\r\n") + "\r\n\r\n" + string(respBody)
+			rw.WriteString(Resp)
+			rw.Flush()
+
+			requestsLeft--
+			if ConnHeader == "close" || requestsLeft == 0 {
+				break KeepAliveLoop
+			}
+		case time := <-time.After(tOutInDura):
+			fmt.Println(time, "TIMEOUT")
+			break KeepAliveLoop
 		}
 
-		if Reqerr != nil {
-			log.Println("Error!", "GoRoutine:  -", handlerID, "-", Reqerr)
-			return
-		}
-		fmt.Println(req.Proto, req.Method, req.RequestURI)
-		for k, v := range req.Header {
-			fmt.Println("	", k, v)
-		}
-
-		RStatusCode := 200
-		RStatus := fullStatusCode[RStatusCode]
-
-		//body retrive
-		respBody := []byte{}
-		if k, v := s.RouteMap[req.RequestURI]; v {
-			respBody = k(*req)
-		} else {
-			respBody = s.RouteMap["CNF"](*req)
-			RStatusCode, RStatus = s.UpdateStatus(404)
-		}
-
-		header := make(map[string][]string)
-
-		//h - connection
-		ConnHeader := req.Header.Get("Connection")
-		if ConnHeader == "keep-alive" {
-			header["Connection"] = []string{"keep-alive"}
-			header["Keep-Alive"] = []string{fmt.Sprintf("timeout=%d, max=%d", timeOut, requestsLeft)}
-		}
-
-		Resp := &http.Response{
-			Status:        RStatus,
-			StatusCode:    RStatusCode,
-			Proto:         "HTTP/1.1",
-			ProtoMajor:    1,
-			ProtoMinor:    1,
-			Body:          io.NopCloser(bytes.NewBuffer(respBody)),
-			ContentLength: int64(len(respBody)),
-			Header:        header,
-		}
-		req.Response = Resp
-		req.Response.Write(rw.Writer)
-		rw.Flush()
-
-		requestsLeft--
-
-		if ConnHeader == "close" || requestsLeft == 0 {
-			break
-		}
 	}
+
 	connection.Close()
 	fmt.Println("#SYS Complete!", "GoRoutine:", handlerID, "→ Closed")
 	fmt.Println(strings.Repeat("-", 50))
@@ -108,10 +114,6 @@ func (s Handler) handle(connection net.Conn) {
 
 func (s *Handler) HandleFunc(route string, hfunc func(req http.Request) []byte) {
 	s.RouteMap[route] = hfunc
-}
-
-func (Handler) UpdateStatus(statusCode int) (int, string) {
-	return statusCode, fullStatusCode[statusCode]
 }
 
 //debug
