@@ -75,7 +75,7 @@ KeepAliveLoop:
 			header := make(map[string]string)
 			//h - date
 			location, _ := time.LoadLocation("GMT")
-			header["Date"] = time.Now().In(location).String()
+			header["Date"] = time.Now().In(location).Format(time.RFC1123)
 			//h - server prod
 			header["Server"] = "Spider Server (bV12)"
 			//h - cont length
