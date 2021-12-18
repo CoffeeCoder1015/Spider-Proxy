@@ -42,17 +42,18 @@ func (s Handler) handle(connection net.Conn) {
 	timeOut := 5
 	tOutInDura := time.Duration(timeOut) * time.Second
 	reqChan := make(chan *http.Request)
-KeepAliveLoop:
-	for {
+	ConnectionClosed := true
+	for ConnectionClosed {
 		go func() {
 			req, Reqerr := http.ReadRequest(rw.Reader)
+			if !ConnectionClosed {
+				return
+			}
 			if Reqerr != nil {
 				log.Println("Error!", "GoRoutine:  -", handlerID, "-", Reqerr)
-				fmt.Println(req.Body)
 			}
 			reqChan <- req
 		}()
-
 		select {
 		case req := <-reqChan:
 			//data disp
@@ -95,11 +96,11 @@ KeepAliveLoop:
 
 			requestsLeft--
 			if ConnHeader == "close" || requestsLeft == 0 {
-				break KeepAliveLoop
+				ConnectionClosed = false
 			}
 		case time := <-time.After(tOutInDura):
-			fmt.Println(time, "TIMEOUT")
-			break KeepAliveLoop
+			fmt.Println(time, "TIMEOUT", handlerID)
+			ConnectionClosed = false
 		}
 
 	}
