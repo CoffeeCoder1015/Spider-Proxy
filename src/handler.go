@@ -73,24 +73,15 @@ func (s Handler) handle(connection net.Conn) {
 				RStatus = fullStatusCode[404]
 			}
 
-			header := make(map[string]string)
+			header := NewHeader()
+			header.add("Content-Length", strconv.FormatInt(int64(len(respBody)), 10))
 
-			location, _ := time.LoadLocation("GMT")
-			header["Date"] = time.Now().In(location).Format(time.RFC1123)
-
-			header["Server"] = "Spider Server (dev.ed.V15)"
-			header["Content-Length"] = strconv.FormatInt(int64(len(respBody)), 10)
 			ConnHeader := req.Header.Get("Connection")
 			if ConnHeader == "keep-alive" {
-				header["Connection"] = "keep-alive"
-				header["Keep-Alive"] = fmt.Sprintf("timeout=%d, max=%d", timeOut, requestsLeft)
+				header.add("Connection", "keep-alive")
+				header.add("Keep-Alive", fmt.Sprintf("timeout=%d, max=%d", timeOut, requestsLeft))
 			}
-
-			RespBlk := []string{"HTTP/1.1 " + RStatus}
-			for k, v := range header {
-				RespBlk = append(RespBlk, fmt.Sprintf("%s: %s", k, v))
-			}
-			Resp := strings.Join(RespBlk, "\r\n") + "\r\n\r\n" + string(respBody)
+			Resp := "HTTP/1.1 " + RStatus + "\r\n" + header.headerString + "\r\n" + string(respBody)
 			rw.WriteString(Resp)
 			rw.Flush()
 
