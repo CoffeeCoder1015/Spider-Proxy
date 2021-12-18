@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/http"
-	"os"
 )
 
 type ServerCore interface {
@@ -15,6 +13,8 @@ type ServerCore interface {
 type SpiderServer struct {
 	ServerCore
 	Handler
+
+	ProxyMode bool
 }
 
 //TCP Server
@@ -36,13 +36,7 @@ func (s *SpiderServer) TCPServer(addr string, port int) bool {
 
 func NewServer() *SpiderServer {
 	Serv := new(SpiderServer)
-	Serv.RouteMap = make(map[string]func(http.Request) []byte)
-	Serv.RouteMap["CNF"] = func(req http.Request) []byte {
-		contentNotFoundFile, cnffReaderr := os.ReadFile("content/CNF.html")
-		if cnffReaderr != nil {
-			log.Panicln("ReadErr:", cnffReaderr)
-		}
-		return contentNotFoundFile
-	}
+	Serv.RouteMap = make(map[string]respondMethod)
+	Serv.HandleFile("CNF", "content/CNF.html")
 	return Serv
 }

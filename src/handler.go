@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -21,11 +22,12 @@ var fullStatusCode = map[int]string{
 type Handler struct {
 	HandleOperators
 
-	RouteMap map[string]func(http.Request) []byte
+	RouteMap map[string]respondMethod
 }
 
 type HandleOperators interface {
 	handle(connection net.Conn)
+	GetResponseBody(req http.Request) []byte
 	HandleFunc(route string, hfunc func(req http.Request) []byte)
 }
 
@@ -42,11 +44,11 @@ func (s Handler) handle(connection net.Conn) {
 	reqChan := make(chan *http.Request)
 KeepAliveLoop:
 	for {
-
 		go func() {
 			req, Reqerr := http.ReadRequest(rw.Reader)
 			if Reqerr != nil {
 				log.Println("Error!", "GoRoutine:  -", handlerID, "-", Reqerr)
+				fmt.Println(req.Body)
 			}
 			reqChan <- req
 		}()
@@ -64,24 +66,19 @@ KeepAliveLoop:
 			RStatus := fullStatusCode[200]
 
 			//body retrive
-			respBody := []byte{}
-			if k, v := s.RouteMap[req.RequestURI]; v {
-				respBody = k(*req)
-			} else {
-				respBody = s.RouteMap["CNF"](*req)
+			respBody, RespErr := s.GetResponseBody(*req)
+			if RespErr.Error() == "404 Not Found" {
+				log.Println(RespErr, req.RequestURI, handlerID)
 				RStatus = fullStatusCode[404]
 			}
 
 			header := make(map[string]string)
-			//h - date
+
 			location, _ := time.LoadLocation("GMT")
 			header["Date"] = time.Now().In(location).Format(time.RFC1123)
-			//h - server prod
-			header["Server"] = "Spider Server (bV12)"
-			//h - cont length
-			header["Content-Length"] = strconv.FormatInt(int64(len(respBody)), 10)
 
-			//h - connection
+			header["Server"] = "Spider Server (dev.ed.V15)"
+			header["Content-Length"] = strconv.FormatInt(int64(len(respBody)), 10)
 			ConnHeader := req.Header.Get("Connection")
 			if ConnHeader == "keep-alive" {
 				header["Connection"] = "keep-alive"
@@ -107,13 +104,63 @@ KeepAliveLoop:
 
 	}
 
-	connection.Close()
+	defer connection.Close()
 	fmt.Println("#SYS Complete!", "GoRoutine:", handlerID, "→ Closed")
 	fmt.Println(strings.Repeat("-", 50))
 }
 
+func (s Handler) GetResponseBody(req http.Request) ([]byte, error) {
+	respBody := []byte{}
+	ErrorString := &CustomError{}
+	if v, exist := s.RouteMap[req.RequestURI]; exist {
+		switch v.RespMethodID {
+		case "file":
+			respBody = v.RespMethod.(func() []byte)()
+		case "general":
+			respBody = v.RespMethod.(func(http.Request) []byte)(req)
+		}
+	} else {
+		respBody = s.RouteMap["CNF"].RespMethod.(func() []byte)()
+		ErrorString = CreateError("404 Not Found")
+	}
+
+	return respBody, ErrorString
+}
+
+//Sturct to carry specific respond method for a request --
+// it removes unnecessary code for some simple responses(like responding with a html file)
+type respondMethod struct {
+	RespMethodID string
+	RespMethod   interface{}
+}
+
+//Respond with data from a file
+func (s *Handler) HandleFile(route string, path string) {
+	s.RouteMap[route] = respondMethod{RespMethodID: "file", RespMethod: func() []byte {
+		data, _ := os.ReadFile(path)
+		return data
+	}}
+}
+
+//Respond with custom code -- intended for comples operation, more generally used for POST requests
 func (s *Handler) HandleFunc(route string, hfunc func(req http.Request) []byte) {
-	s.RouteMap[route] = hfunc
+	s.RouteMap[route] = respondMethod{RespMethodID: "general", RespMethod: hfunc}
+}
+
+//Renamed code from erros.New to generate errors
+//To get a Error value
+func CreateError(text string) *CustomError {
+	return &CustomError{s: text}
+}
+
+//struct that is needed to carry the Error info
+type CustomError struct {
+	s string
+}
+
+// Defined in *builtins* that a error type is interface w/ function: Error() string
+func (s CustomError) Error() string {
+	return s.s
 }
 
 //debug
