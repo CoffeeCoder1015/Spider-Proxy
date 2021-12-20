@@ -18,7 +18,7 @@ type ProxyOut struct {
 	client http.Client
 }
 
-func (s *ProxyOut) ProxReq(req *http.Request) []byte {
+func (s *ProxyOut) ProxReq(req *http.Request) ([]byte, error) {
 	req.RequestURI = ""
 	req.URL.Scheme = "http"
 	if req.URL.Port() == "443" {
@@ -27,12 +27,14 @@ func (s *ProxyOut) ProxReq(req *http.Request) []byte {
 	resp, err := s.client.Do(req)
 	if err != nil {
 		log.Println("Response got on ProxyOut", err)
+	} else {
+		defer resp.Body.Close()
+		respBody, err := ioutil.ReadAll(resp.Body)
+		fmt.Println(resp.Request.URL)
+		if err != nil {
+			log.Println("Read of RespBody on ProxReq", err)
+		}
+		return respBody, nil
 	}
-	defer resp.Body.Close()
-	respBody, err := ioutil.ReadAll(resp.Body)
-	fmt.Println(resp.Request.URL)
-	if err != nil {
-		log.Println("Read of RespBody on ProxReq", err)
-	}
-	return respBody
+	return []byte{}, CreateError("Failed to make request")
 }

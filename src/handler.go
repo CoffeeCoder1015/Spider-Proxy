@@ -60,8 +60,8 @@ func (s Handler) handle(connection net.Conn) {
 		select {
 		case req := <-reqChan:
 			//data disp
-			fmt.Println(req.Proto, req.Method, req.URL, req.URL.Query())
-			fmt.Println(req.RequestURI, req.URL.Path)
+			fmt.Println(req.Proto, req.Method, req.RequestURI)
+			fmt.Println(req.URL, req.URL.Query())
 			for k, v := range req.Header {
 				fmt.Println("	", k, v)
 			}
@@ -121,7 +121,7 @@ func (s *Handler) GetResponseBody(req *http.Request) ([]byte, error) {
 		}
 	}
 	if !proxySuccess {
-		if v, exist := s.RouteMap[req.URL.Path]; exist {
+		if v, exist := s.RouteMap[req.URL.Scheme+"://"+req.URL.Host+req.URL.Path]; exist {
 			switch v.RespMethodID {
 			case "file":
 				respBody = v.RespMethod.(func() []byte)()
@@ -142,7 +142,11 @@ func (s *Handler) ProxyResponse(req *http.Request) ([]byte, error) {
 	if !isUrl(req.RequestURI) {
 		return []byte{}, CreateError("Not a URL")
 	}
-	return s.ProxReq(req), nil
+	rDat, err := s.ProxReq(req)
+	if err != nil {
+		return []byte{}, err
+	}
+	return rDat, nil
 }
 
 //Sturct to carry specific respond method for a request --
