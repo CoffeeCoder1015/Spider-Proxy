@@ -57,7 +57,7 @@ func (s Handler) handle(connection net.Conn) {
 		select {
 		case req := <-reqChan:
 			//data disp
-			fmt.Println(req.Proto, req.Method, req.RequestURI)
+			fmt.Println(req.Proto, req.Method, req.RequestURI, req.URL.Path, req.URL.Query())
 			for k, v := range req.Header {
 				fmt.Println("	", k, v)
 			}
@@ -101,15 +101,15 @@ func (s Handler) handle(connection net.Conn) {
 	fmt.Println(strings.Repeat("-", 50))
 }
 
-func (s Handler) GetResponseBody(req http.Request) ([]byte, error) {
+func (s *Handler) GetResponseBody(req http.Request) ([]byte, error) {
 	respBody := []byte{}
 	ErrorString := &CustomError{}
-	if v, exist := s.RouteMap[req.RequestURI]; exist {
+	if v, exist := s.RouteMap[req.URL.Path]; exist {
 		switch v.RespMethodID {
 		case "file":
 			respBody = v.RespMethod.(func() []byte)()
 		case "general":
-			respBody = v.RespMethod.(func(http.Request) []byte)(req)
+			respBody = v.RespMethod.(func(req *http.Request) []byte)(&req)
 		}
 	} else {
 		respBody = s.RouteMap["CNF"].RespMethod.(func() []byte)()
@@ -126,6 +126,7 @@ type respondMethod struct {
 	RespMethod   interface{}
 }
 
+//HandleFile
 //Respond with data from a file
 func (s *Handler) HandleFile(route string, path string) {
 	s.RouteMap[route] = respondMethod{RespMethodID: "file", RespMethod: func() []byte {
@@ -134,8 +135,9 @@ func (s *Handler) HandleFile(route string, path string) {
 	}}
 }
 
+//HandleFunc
 //Respond with custom code -- intended for comples operation, more generally used for POST requests
-func (s *Handler) HandleFunc(route string, hfunc func(req http.Request) []byte) {
+func (s *Handler) HandleFunc(route string, hfunc func(req *http.Request) []byte) {
 	s.RouteMap[route] = respondMethod{RespMethodID: "general", RespMethod: hfunc}
 }
 

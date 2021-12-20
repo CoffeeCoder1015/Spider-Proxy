@@ -13,8 +13,6 @@ type ServerCore interface {
 type SpiderServer struct {
 	ServerCore
 	Handler
-
-	ProxyMode bool
 }
 
 //TCP Server
