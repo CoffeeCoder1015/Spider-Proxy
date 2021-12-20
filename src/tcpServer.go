@@ -32,8 +32,9 @@ func (s *SpiderServer) TCPServer(addr string, port int) bool {
 	}
 }
 
-func NewServer() *SpiderServer {
+func NewServer(Proxy bool) *SpiderServer {
 	Serv := new(SpiderServer)
+	Serv.ProxyMode = true
 	Serv.RouteMap = make(map[string]respondMethod)
 	Serv.HandleFile("CNF", "content/CNF.html")
 	return Serv

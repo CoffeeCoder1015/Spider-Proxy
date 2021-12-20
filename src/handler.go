@@ -21,8 +21,10 @@ var fullStatusCode = map[int]string{
 
 type Handler struct {
 	HandleOperators
+	ProxyOut
 
-	RouteMap map[string]respondMethod
+	RouteMap  map[string]respondMethod
+	ProxyMode bool
 }
 
 type HandleOperators interface {
@@ -51,13 +53,15 @@ func (s Handler) handle(connection net.Conn) {
 			}
 			if Reqerr != nil {
 				log.Println("Error!", "GoRoutine:  -", handlerID, "-", Reqerr)
+			} else {
+				reqChan <- req
 			}
-			reqChan <- req
 		}()
 		select {
 		case req := <-reqChan:
 			//data disp
-			fmt.Println(req.Proto, req.Method, req.RequestURI, req.URL.Path, req.URL.Query())
+			fmt.Println(req.Proto, req.Method, req.URL, req.URL.Query())
+			fmt.Println(req.RequestURI, req.URL.Path)
 			for k, v := range req.Header {
 				fmt.Println("	", k, v)
 			}
@@ -67,10 +71,12 @@ func (s Handler) handle(connection net.Conn) {
 			RStatus := fullStatusCode[200]
 
 			//body retrive
-			respBody, RespErr := s.GetResponseBody(*req)
+			respBody, RespErr := s.GetResponseBody(req)
 			if RespErr.Error() == "404 Not Found" {
 				log.Println(RespErr, req.RequestURI, handlerID)
 				RStatus = fullStatusCode[404]
+			} else {
+				log.Println(req.RequestURI, RStatus)
 			}
 
 			header := NewHeader()
@@ -101,22 +107,42 @@ func (s Handler) handle(connection net.Conn) {
 	fmt.Println(strings.Repeat("-", 50))
 }
 
-func (s *Handler) GetResponseBody(req http.Request) ([]byte, error) {
+func (s *Handler) GetResponseBody(req *http.Request) ([]byte, error) {
 	respBody := []byte{}
 	ErrorString := &CustomError{}
-	if v, exist := s.RouteMap[req.URL.Path]; exist {
-		switch v.RespMethodID {
-		case "file":
-			respBody = v.RespMethod.(func() []byte)()
-		case "general":
-			respBody = v.RespMethod.(func(req *http.Request) []byte)(&req)
+	proxySuccess := false
+	if s.ProxyMode {
+		r, err := s.ProxyResponse(req)
+		if err == nil {
+			respBody = r
+			proxySuccess = true
+		} else {
+			log.Println("PROXY", err)
 		}
-	} else {
-		respBody = s.RouteMap["CNF"].RespMethod.(func() []byte)()
-		ErrorString = CreateError("404 Not Found")
+	}
+	if !proxySuccess {
+		if v, exist := s.RouteMap[req.URL.Path]; exist {
+			switch v.RespMethodID {
+			case "file":
+				respBody = v.RespMethod.(func() []byte)()
+			case "general":
+				respBody = v.RespMethod.(func(req *http.Request) []byte)(req)
+			}
+		} else {
+			fmt.Println("Proc")
+			respBody = s.RouteMap["CNF"].RespMethod.(func() []byte)()
+			ErrorString = CreateError("404 Not Found")
+		}
 	}
 
 	return respBody, ErrorString
+}
+
+func (s *Handler) ProxyResponse(req *http.Request) ([]byte, error) {
+	if !isUrl(req.RequestURI) {
+		return []byte{}, CreateError("Not a URL")
+	}
+	return s.ProxReq(req), nil
 }
 
 //Sturct to carry specific respond method for a request --

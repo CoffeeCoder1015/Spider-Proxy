@@ -20,7 +20,7 @@ func doMath(equation string) string {
 }
 
 func main() {
-	s := NewServer()
+	s := NewServer(true)
 	s.HandleFile("/", "content/index.html")
 	s.HandleFile("/stuff.js", "content/stuff.js")
 	s.HandleFile("/CloseButton.png", "content/CloseButton.png")
