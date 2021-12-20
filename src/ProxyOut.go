@@ -11,11 +11,7 @@ import (
 func isUrl(checkUrl string) bool {
 	fmt.Println(checkUrl)
 	_, err := url.Parse(checkUrl)
-	if err != nil {
-		return false
-	}
-
-	return true
+	return err == nil
 }
 
 type ProxyOut struct {

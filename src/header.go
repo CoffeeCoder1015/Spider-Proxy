@@ -20,6 +20,6 @@ func NewHeader() *responseHeader {
 	h := new(responseHeader)
 	location, _ := time.LoadLocation("GMT")
 	h.add("Date", time.Now().In(location).Format(time.RFC1123))
-	h.add("Server", "Spider Server (dev.ed.V15)")
+	h.add("Server", "Spider Server (alpha.ed.1)")
 	return h
 }
