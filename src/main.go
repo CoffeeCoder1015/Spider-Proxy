@@ -20,14 +20,14 @@ func doMath(equation string) string {
 }
 
 func main() {
-	s := NewServer(true)
-	s.HandleFile("/", "content/index.html")
-	s.HandleFile("/stuff.js", "content/stuff.js")
-	s.HandleFile("/CloseButton.png", "content/CloseButton.png")
+	s := NewHTTPServer()
+	s.HTTP.HandleFile("/", "content/index.html")
+	s.HTTP.HandleFile("/stuff.js", "content/stuff.js")
+	s.HTTP.HandleFile("/CloseButton.png", "content/CloseButton.png")
 
 	ansChan := make(chan string)
 
-	s.HandleFunc("/math", func(req *http.Request) []byte {
+	s.HTTP.HandleFunc("/math", func(req *http.Request) []byte {
 		Q := req.URL.Query().Get("eq")
 		ans := doMath(Q)
 		fmt.Println(Q, ans)
@@ -36,11 +36,11 @@ func main() {
 		data, _ := os.ReadFile("content/app/QueryStringTester.html")
 		return data
 	})
-	s.HandleFunc("/math.ans", func(req *http.Request) []byte {
+	s.HTTP.HandleFunc("/math.ans", func(req *http.Request) []byte {
 		ans := <-ansChan
 		fmt.Println(ans)
 		return []byte(ans)
 	})
-	s.HandleFile("/math/getAns.js", "content/app/getAns.js")
+	s.HTTP.HandleFile("/math/getAns.js", "content/app/getAns.js")
 	s.TCPServer("", 8080)
 }

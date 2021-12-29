@@ -6,13 +6,13 @@ import (
 	"net"
 )
 
-type ServerCore interface {
-	TCPServer(addr string, port int) bool
+type SpiderServer struct {
+	Handler
+	HTTP HTTPInterface
 }
 
-type SpiderServer struct {
-	ServerCore
-	Handler
+type TCPServer interface {
+	TCPServer(addr string, port int) bool
 }
 
 //TCP Server
@@ -32,10 +32,12 @@ func (s *SpiderServer) TCPServer(addr string, port int) bool {
 	}
 }
 
-func NewServer(Proxy bool) *SpiderServer {
-	Serv := new(SpiderServer)
-	Serv.ProxyMode = true
-	Serv.RouteMap = make(map[string]respondMethod)
-	Serv.HandleFile("CNF", "content/CNF.html")
-	return Serv
+func NewHTTPServer() *SpiderServer {
+	Proto := ProtoHTTP{timeOut: 5, requestsLeft: 10, RouteMap: make(map[string]respondMethod)}
+	Proto.HandleFile("CNF", "content/Errors/CNF.html")
+	Proto.HandleFile("BR", "content/Errors/BR.html")
+	Server := new(SpiderServer)
+	Server.HTTP = &Proto
+	Server.HandlingInterface = &Proto
+	return Server
 }
