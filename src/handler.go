@@ -35,7 +35,7 @@ func (s Handler) handle(connection net.Conn) {
 
 	for ConnectionClosed {
 		go func() {
-			DataBuf := make([]byte, 256)
+			DataBuf := make([]byte, rw.Reader.Size())
 			_, Reqerr := rw.Read(DataBuf)
 			if dInBuf := rw.Reader.Buffered(); dInBuf > 0 {
 				dataInBuffer, pkErr := rw.Peek(rw.Reader.Buffered())
@@ -43,8 +43,8 @@ func (s Handler) handle(connection net.Conn) {
 					log.Println("Peek Error > ", pkErr)
 				}
 				DataBuf = append(DataBuf, dataInBuffer...)
+				rw.Discard(rw.Reader.Buffered())
 			}
-			rw.Discard(rw.Reader.Buffered())
 			if !ConnectionClosed {
 				return
 			}
