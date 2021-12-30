@@ -32,24 +32,32 @@ func (s Handler) handle(connection net.Conn) {
 	tOutInDura := time.Duration(timeOut) * time.Second
 	reqChan := make(chan string)
 	ConnectionClosed := true
+
 	for ConnectionClosed {
 		go func() {
-			buf := make([]byte, 4096)
-			_, Reqerr := rw.Read(buf)
+			DataBuf := make([]byte, 256)
+			_, Reqerr := rw.Read(DataBuf)
+			if dInBuf := rw.Reader.Buffered(); dInBuf > 0 {
+				dataInBuffer, pkErr := rw.Peek(rw.Reader.Buffered())
+				if pkErr != nil {
+					log.Println("Peek Error > ", pkErr)
+				}
+				DataBuf = append(DataBuf, dataInBuffer...)
+			}
+			rw.Discard(rw.Reader.Buffered())
 			if !ConnectionClosed {
 				return
 			}
 			if Reqerr != nil {
 				log.Println("Error!", "GoRoutine:  -", handlerID, "-", Reqerr)
 			} else {
-				reqChan <- string(buf)
+				reqChan <- string(DataBuf)
 			}
 		}()
 		select {
 		case req := <-reqChan:
 			fmt.Println(req)
 			intCom := s.HandlingInterface.MakeResponse(req, rw.Writer)
-			fmt.Println(intCom)
 			requestsLeft--
 			if intCom == "CClose" || requestsLeft == 0 {
 				ConnectionClosed = false
