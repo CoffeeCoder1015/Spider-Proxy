@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,14 +21,14 @@ func doMath(equation string) string {
 }
 
 func main() {
-	s := NewHTTPServer()
-	s.HTTP.HandleFile("/", "content/index.html")
-	s.HTTP.HandleFile("/stuff.js", "content/stuff.js")
-	s.HTTP.HandleFile("/CloseButton.png", "content/CloseButton.png")
+	s := NewHTTPProxyServer()
+	s.HTTPProxy.HandleFile("/", "content/index.html")
+	s.HTTPProxy.HandleFile("/stuff.js", "content/stuff.js")
+	s.HTTPProxy.HandleFile("/CloseButton.png", "content/CloseButton.png")
 
 	ansChan := make(chan string)
 
-	s.HTTP.HandleFunc("/math", func(req *http.Request) []byte {
+	s.HTTPProxy.HandleFunc("/math", func(req *http.Request) []byte {
 		Q := req.URL.Query().Get("eq")
 		ans := doMath(Q)
 		fmt.Println(Q, ans)
@@ -36,11 +37,17 @@ func main() {
 		data, _ := os.ReadFile("content/app/QueryStringTester.html")
 		return data
 	})
-	s.HTTP.HandleFunc("/math.ans", func(req *http.Request) []byte {
+	s.HTTPProxy.HandleFunc("/math.ans", func(req *http.Request) []byte {
 		ans := <-ansChan
 		fmt.Println(ans)
 		return []byte(ans)
 	})
-	s.HTTP.HandleFile("/math/getAns.js", "content/app/getAns.js")
+	s.HTTPProxy.HandleFile("/math/getAns.js", "content/app/getAns.js")
+	s.HTTPProxy.RedirectFunction("http://gib/", func(req *http.Request) []byte {
+		c, _ := http.Get("http://localhost:7123")
+		data, _ := io.ReadAll(c.Body)
+		return data
+	})
+	s.HTTPProxy.ResponseHeaderOveride(HeaderManip{Field: "Server", Value: "Spider Proxy alph v1 (Powered by Spider Server alpha v2)"})
 	s.TCPServer("", 8080)
 }

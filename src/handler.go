@@ -14,10 +14,24 @@ import (
 
 type Handler struct {
 	HandlingInterface HandleInterface
+	timeOut           int
+	requestsPerHandle int
 }
 
+//indicates accpetted function
+//the standard route by which a protocol creates a response for the handler to call -- it is not how something interacts with the handler, it is how the handler interacts with something else
 type HandleInterface interface {
 	MakeResponse(request string, rpw *bufio.Writer) string
+}
+
+//exposed function
+// this is how the handler interacts with something else
+type LifeTimeData interface {
+	GetLifeTime() (int, int)
+}
+
+func (s Handler) GetLifeTime() (int, int) {
+	return s.timeOut, s.requestsPerHandle
 }
 
 func (s Handler) handle(connection net.Conn) {
@@ -27,8 +41,8 @@ func (s Handler) handle(connection net.Conn) {
 	rw := bufio.NewReadWriter(bufio.NewReader(connection), bufio.NewWriter(connection))
 
 	//keep-alive trackers
-	requestsLeft := 100
-	timeOut := 2
+	requestsLeft := s.requestsPerHandle
+	timeOut := s.timeOut
 	tOutInDura := time.Duration(timeOut) * time.Second
 	reqChan := make(chan string)
 	ConnectionClosed := true
@@ -57,7 +71,9 @@ func (s Handler) handle(connection net.Conn) {
 		select {
 		case req := <-reqChan:
 			fmt.Println(req)
-			intCom := s.HandlingInterface.MakeResponse(req, rw.Writer)
+			fmt.Println(strings.Repeat("-", 10))
+			var intCom string
+			intCom = s.HandlingInterface.MakeResponse(req, rw.Writer)
 			requestsLeft--
 			if intCom == "CClose" || requestsLeft == 0 {
 				ConnectionClosed = false

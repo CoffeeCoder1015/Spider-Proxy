@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+//HTTP Section
 var fullStatusCode = map[int]string{
 	200: "200 OK",
 	400: "400 Bad Request",
@@ -19,16 +20,11 @@ var fullStatusCode = map[int]string{
 	408: "408 Request Timeout",
 }
 
-type HTTPInterface interface {
-	HandleFile(route string, path string)
-	HandleFunc(route string, hfunc func(req *http.Request) []byte)
-}
-
+//HTTP Protocol
 type ProtoHTTP struct {
-	RouteMap     map[string]respondMethod
-	timeOut      int
-	requestsLeft int
-	interComdata string
+	RouteMap   map[string]respondMethod
+	LTData     LifeTimeData
+	returnData string
 }
 
 //Sturct to carry specific respond method for a request --
@@ -36,6 +32,12 @@ type ProtoHTTP struct {
 type respondMethod struct {
 	RespMethodID string
 	RespMethod   interface{}
+}
+
+//Selective functions that are exposed as methods of the server to provide customizability
+type HTTPInterface interface {
+	HandleFile(route string, path string)
+	HandleFunc(route string, hfunc func(req *http.Request) []byte)
 }
 
 //HandleFile
@@ -53,14 +55,10 @@ func (s *ProtoHTTP) HandleFunc(route string, hfunc func(req *http.Request) []byt
 	s.RouteMap[route] = respondMethod{RespMethodID: "general", RespMethod: hfunc}
 }
 
-type StatDatInq interface {
+//Methods used by the ProtoHTTPProcessing (true handler) to communicate with the Main Handler and the HTTP Protocol struct
+type HigherLevelDataQuery interface {
 	GetRPMethod(QS string) (respondMethod, error)
-	GetKAStats() []interface{}
-	ICD(data string)
-}
-
-func (s ProtoHTTP) GetKAStats() []interface{} {
-	return []interface{}{s.timeOut, s.requestsLeft}
+	ReturnData(data string)
 }
 
 func (s *ProtoHTTP) GetRPMethod(QS string) (respondMethod, error) {
@@ -76,44 +74,51 @@ func (s *ProtoHTTP) GetRPMethod(QS string) (respondMethod, error) {
 	return rto, ErrorString
 }
 
-func (s *ProtoHTTP) ICD(data string) {
-	s.interComdata = data
+func (s *ProtoHTTP) ReturnData(data string) {
+	s.returnData = data
 }
 
 func (s *ProtoHTTP) MakeResponse(request string, rpw *bufio.Writer) string {
-	s.interComdata = ""
-	rp := ProtoHTTPProcessing{RaqReq: request, ResponseWriter: rpw, DI: s, ParsedReq: &http.Request{URL: &url.URL{}}}
+	s.returnData = ""
+	tOut, Max := s.LTData.GetLifeTime()
+	ParsedRequestInit := &http.Request{URL: &url.URL{}}
+	rp := HTTPRespHandler{RawReq: request, ParsedReq: ParsedRequestInit, DQ: s, TimeOut: tOut, MaxRequests: Max}
+	rp.Header.hMap = make(map[string]string)
 	rp.ReadReqString()
 	rp.GetResponseBody()
 	rp.MakeHeader()
-	rp.WriteResponse()
-	return s.interComdata
+	rpw.WriteString(constructResponse(rp.Status, rp.Header.String(), string(rp.ResponseBody)))
+	rpw.Flush()
+	return s.returnData
 }
 
-type ProtoHTTPProcessing struct {
-	ParsedReq      *http.Request // impl parsed request
-	RaqReq         string        //impl raw request *
-	Status         string        //impl status string for response
-	ResponseWriter *bufio.Writer //impl method to write response back *
-	ResponseBody   []byte        //impl Body data being responded
-	DI             StatDatInq    //impl Data Inquiry *
-	Header         responseHeader
+type HTTPRespHandler struct {
+	ParsedReq    *http.Request        // impl parsed request
+	RawReq       string               //impl raw request *
+	Status       string               //impl status string for response
+	ResponseBody []byte               //impl Body data being responded
+	DQ           HigherLevelDataQuery //impl Data Inquiry *
+	Header       responseHeader
+	TimeOut      int
+	MaxRequests  int
 }
 
-func (s *ProtoHTTPProcessing) ReadReqString() {
-	req, err := http.ReadRequest(bufio.NewReader((bytes.NewBufferString(s.RaqReq))))
+func (s *HTTPRespHandler) ReadReqString() error {
+	req, err := http.ReadRequest(bufio.NewReader((bytes.NewBufferString(s.RawReq))))
 	if err != nil {
 		log.Println("ERR parsing request >", err)
 		s.Status = fullStatusCode[400]
 		s.ParsedReq.URL.Path = "BR"
+		return CreateError("Cannot parse HTTPS encrypted request")
 	} else {
 		s.ParsedReq = req
 	}
+	return nil
 }
 
-func (s *ProtoHTTPProcessing) GetResponseBody() {
+func (s *HTTPRespHandler) GetResponseBody() {
 	rURL := s.ParsedReq.URL.Path
-	v, err := s.DI.GetRPMethod(rURL)
+	v, err := s.DQ.GetRPMethod(rURL)
 	if rURL == "BR" { //error 400
 		s.ResponseBody = v.RespMethod.(func() []byte)()
 	} else if err != nil { //error 404
@@ -129,7 +134,7 @@ func (s *ProtoHTTPProcessing) GetResponseBody() {
 	}
 }
 
-func (s *ProtoHTTPProcessing) MakeHeader() {
+func (s *HTTPRespHandler) MakeHeader() {
 	location, _ := time.LoadLocation("GMT")
 	s.Header.add("Date", time.Now().In(location).Format(time.RFC1123))
 	s.Header.add("Server", "Spider Server (alpha.ed.1)")
@@ -137,15 +142,10 @@ func (s *ProtoHTTPProcessing) MakeHeader() {
 	CStatus := s.ParsedReq.Header.Get("Connection")
 	s.Header.add("Connection", CStatus)
 	if CStatus == "keep-alive" {
-		s.Header.add("Keep-Alive", fmt.Sprintf("timeout=%d, max=%d", s.DI.GetKAStats()...))
+		s.Header.add("Keep-Alive", fmt.Sprintf("timeout=%d, max=%d", s.TimeOut, s.MaxRequests))
 	} else if CStatus == "close" {
-		s.DI.ICD("CClose")
+		s.DQ.ReturnData("CClose")
 	}
-}
-
-func (s *ProtoHTTPProcessing) WriteResponse() {
-	s.ResponseWriter.WriteString(constructResponse(s.Status, s.Header.headerString, string(s.ResponseBody)))
-	s.ResponseWriter.Flush()
 }
 
 func constructResponse(status string, header string, body string) string {

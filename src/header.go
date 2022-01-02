@@ -1,9 +1,21 @@
 package main
 
 type responseHeader struct {
-	headerString string
+	hMap map[string]string
 }
 
 func (s *responseHeader) add(header string, value string) {
-	s.headerString += header + ": " + value + "\r\n"
+	s.hMap[header] = header + ": " + value + "\r\n"
+}
+
+func (s *responseHeader) remove(header string) {
+	delete(s.hMap, header)
+}
+
+func (s *responseHeader) String() string {
+	rt := ""
+	for _, v := range s.hMap {
+		rt += v
+	}
+	return rt
 }
