@@ -137,7 +137,7 @@ func (s *HTTPRespHandler) GetResponseBody() {
 func (s *HTTPRespHandler) MakeHeader() {
 	location, _ := time.LoadLocation("GMT")
 	s.Header.add("Date", time.Now().In(location).Format(time.RFC1123))
-	s.Header.add("Server", "Spider Server (alpha.ed.1)")
+	s.Header.add("Server", "Spider Server (alpha.ed.2.3)")
 	s.Header.add("Content-Length", strconv.FormatInt(int64(len(s.ResponseBody)), 10))
 	CStatus := s.ParsedReq.Header.Get("Connection")
 	s.Header.add("Connection", CStatus)

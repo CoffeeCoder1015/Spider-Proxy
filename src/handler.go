@@ -63,7 +63,11 @@ func (s Handler) handle(connection net.Conn) {
 				return
 			}
 			if Reqerr != nil {
-				log.Println("Error!", "GoRoutine:  -", handlerID, "-", Reqerr)
+				log.Println("Error! GoRoutine:  -", handlerID, " > Request Error > ", Reqerr)
+				if Reqerr.Error() == "tls: first record does not look like a TLS handshake" {
+					fmt.Println("switch to no tls")
+					return
+				}
 			} else {
 				reqChan <- string(DataBuf)
 			}

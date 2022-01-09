@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -12,19 +13,32 @@ type ServerSkeleton struct {
 
 //TCP Server
 func (s *ServerSkeleton) TCPServer(addr string, port int) bool {
+	cert, err := tls.LoadX509KeyPair("Certificates/spx.crt", "Certificates/spx.key")
+	if err != nil {
+		log.Println("Error on Certificate Loading", err)
+	}
+	config := &tls.Config{Certificates: []tls.Certificate{cert}}
+
 	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", addr, port))
+
+	tlsLn := tls.NewListener(ln, config)
+
 	if err != nil {
 		log.Println("server starting err", err)
 		return false
 	}
 	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Println(err)
-			return false
-		}
-		go s.handle(conn)
+		go s.acceptAndSendtohandle(ln)
+		s.acceptAndSendtohandle(tlsLn)
 	}
+}
+
+func (s *ServerSkeleton) acceptAndSendtohandle(listener net.Listener) {
+	conn, err := listener.Accept()
+	if err != nil {
+		log.Println(err)
+	}
+	go s.handle(conn)
 }
 
 type HTTPServer struct {

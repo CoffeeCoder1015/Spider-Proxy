@@ -1,0 +1,16 @@
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+subjectAltName = @alt_names
+
+[distinguished_name]
+countryName                 = NZ
+stateOrProvinceName         = Auckland
+localityName               = Auckland
+organizationName           = Project Spider Networks
+organizationalUnitName      = SSC
+commonName                 = localhost
+
+[alt_names]
+DNS.1 = 192.168.1.119
+DNS.2 = localhost

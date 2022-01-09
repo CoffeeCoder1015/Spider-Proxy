@@ -1,0 +1,22 @@
+This is definitely a Certificate Provider
+pphrase = 1012
+Country = NZ
+State = Auckland
+City = Auckland
+Org-Name = Mag Certificate Services
+OrgUnitName = <nil>
+Common Name = Mag Certificate Services
+Email = <nil>
+
+SpiderServer Cert (CSR)
+Country = NZ
+State = Auckland
+City = Auckland
+Org-Name = Project Spider Networks
+OrgUnitName = SSC
+Common Name  = Spider Server Core
+Email = <nil>
+ChallPasswd = 10122
+
+pfx file
+expPasswd 1011
