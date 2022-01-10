@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"runtime"
@@ -14,8 +16,9 @@ import (
 
 type Handler struct {
 	HandlingInterface HandleInterface
+	tlsConfig         tls.Config
 	timeOut           int
-	requestsPerHandle int
+	requestsLeft      int
 }
 
 //indicates accpetted function
@@ -31,7 +34,7 @@ type LifeTimeData interface {
 }
 
 func (s Handler) GetLifeTime() (int, int) {
-	return s.timeOut, s.requestsPerHandle
+	return s.timeOut, s.requestsLeft
 }
 
 func (s Handler) handle(connection net.Conn) {
@@ -40,34 +43,41 @@ func (s Handler) handle(connection net.Conn) {
 	fmt.Println("#SYS Connection:", connection.RemoteAddr().String(), "GoRoutine:", handlerID, time.Now())
 	rw := bufio.NewReadWriter(bufio.NewReader(connection), bufio.NewWriter(connection))
 
+	TransferBuf := new(bytes.Buffer)
+	tlsConn := tls.Server(tempConn{Conn: connection, reader: io.TeeReader(connection, TransferBuf)}, &s.tlsConfig)
+	err := tlsConn.Handshake()
+
+	ConnOpen := true
+
+	if err != nil {
+		fmt.Println("Err on initalising TLS >", err)
+		Data, breadFullErr := BufioReadFull(*bufio.NewReader(connection))
+		if breadFullErr != nil {
+			log.Println("FR Err >", breadFullErr)
+		}
+		TransferBuf.Write(Data)
+		intCom := s.HandlingInterface.MakeResponse(TransferBuf.String(), rw.Writer)
+		s.requestsLeft--
+		if intCom == "CClose" {
+			ConnOpen = false
+		}
+	} else {
+		connection = tlsConn
+		rw = bufio.NewReadWriter(bufio.NewReader(connection), bufio.NewWriter(connection))
+	}
+
 	//keep-alive trackers
-	requestsLeft := s.requestsPerHandle
 	timeOut := s.timeOut
 	tOutInDura := time.Duration(timeOut) * time.Second
 	reqChan := make(chan string)
-	ConnectionClosed := true
-
-	for ConnectionClosed {
+	for ConnOpen {
 		go func() {
-			DataBuf := make([]byte, rw.Reader.Size())
-			_, Reqerr := rw.Read(DataBuf)
-			if dInBuf := rw.Reader.Buffered(); dInBuf > 0 {
-				dataInBuffer, pkErr := rw.Peek(rw.Reader.Buffered())
-				if pkErr != nil {
-					log.Println("Peek Error > ", pkErr)
-				}
-				DataBuf = append(DataBuf, dataInBuffer...)
-				rw.Discard(rw.Reader.Buffered())
-			}
-			if !ConnectionClosed {
+			DataBuf, Reqerr := BufioReadFull(*rw.Reader)
+			if !ConnOpen {
 				return
 			}
 			if Reqerr != nil {
 				log.Println("Error! GoRoutine:  -", handlerID, " > Request Error > ", Reqerr)
-				if Reqerr.Error() == "tls: first record does not look like a TLS handshake" {
-					fmt.Println("switch to no tls")
-					return
-				}
 			} else {
 				reqChan <- string(DataBuf)
 			}
@@ -76,15 +86,14 @@ func (s Handler) handle(connection net.Conn) {
 		case req := <-reqChan:
 			fmt.Println(req)
 			fmt.Println(strings.Repeat("-", 10))
-			var intCom string
-			intCom = s.HandlingInterface.MakeResponse(req, rw.Writer)
-			requestsLeft--
-			if intCom == "CClose" || requestsLeft == 0 {
-				ConnectionClosed = false
+			intCom := s.HandlingInterface.MakeResponse(req, rw.Writer)
+			s.requestsLeft--
+			if intCom == "CClose" || s.requestsLeft == 0 {
+				ConnOpen = false
 			}
 		case time := <-time.After(tOutInDura):
 			fmt.Println(time, "TIMEOUT", handlerID)
-			ConnectionClosed = false
+			ConnOpen = false
 		}
 
 	}
@@ -92,6 +101,20 @@ func (s Handler) handle(connection net.Conn) {
 	defer connection.Close()
 	fmt.Println("#SYS Complete!", "GoRoutine:", handlerID, "→ Closed")
 	fmt.Println(strings.Repeat("-", 50))
+}
+
+func BufioReadFull(r bufio.Reader) ([]byte, error) {
+	DataBuf := make([]byte, r.Size())
+	_, Reqerr := r.Read(DataBuf)
+	if dInBuf := r.Buffered(); dInBuf > 0 {
+		dataInBuffer, pkErr := r.Peek(r.Buffered())
+		if pkErr != nil {
+			log.Println("Peek Error > ", pkErr)
+		}
+		DataBuf = append(DataBuf, dataInBuffer...)
+		r.Discard(r.Buffered())
+	}
+	return DataBuf, Reqerr
 }
 
 //Renamed code from erros.New to generate errors
@@ -109,6 +132,13 @@ type CustomError struct {
 func (s *CustomError) Error() string {
 	return s.s
 }
+
+type tempConn struct {
+	net.Conn
+	reader io.Reader
+}
+
+func (conn tempConn) Read(p []byte) (int, error) { return conn.reader.Read(p) }
 
 //debug
 func getGID() uint64 {

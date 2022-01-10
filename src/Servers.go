@@ -18,27 +18,21 @@ func (s *ServerSkeleton) TCPServer(addr string, port int) bool {
 		log.Println("Error on Certificate Loading", err)
 	}
 	config := &tls.Config{Certificates: []tls.Certificate{cert}}
+	s.tlsConfig = *config
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", addr, port))
-
-	tlsLn := tls.NewListener(ln, config)
 
 	if err != nil {
 		log.Println("server starting err", err)
 		return false
 	}
 	for {
-		go s.acceptAndSendtohandle(ln)
-		s.acceptAndSendtohandle(tlsLn)
+		rawConn, err := ln.Accept()
+		if err != nil {
+			log.Println(err)
+		}
+		go s.handle(rawConn)
 	}
-}
-
-func (s *ServerSkeleton) acceptAndSendtohandle(listener net.Listener) {
-	conn, err := listener.Accept()
-	if err != nil {
-		log.Println(err)
-	}
-	go s.handle(conn)
 }
 
 type HTTPServer struct {
@@ -49,7 +43,7 @@ type HTTPServer struct {
 func NewHTTPServer() *HTTPServer {
 	Server := new(HTTPServer)
 	Server.timeOut = 5
-	Server.requestsPerHandle = 10
+	Server.requestsLeft = 10
 
 	Proto := ProtoHTTP{LTData: Server, RouteMap: make(map[string]respondMethod)}
 	Proto.HandleFile("CNF", "content/Errors/CNF.html")
@@ -68,7 +62,7 @@ type HTTPProxyServer struct {
 func NewHTTPProxyServer() *HTTPProxyServer {
 	Server := new(HTTPProxyServer)
 	Server.timeOut = 5
-	Server.requestsPerHandle = 10
+	Server.requestsLeft = 10
 
 	Proto := ProtoHTTProxy{ProtoHTTP: ProtoHTTP{LTData: Server, RouteMap: make(map[string]respondMethod)}, URLOverideMap: make(map[string]respondMethod)}
 	Proto.HandleFile("CNF", "content/Errors/CNF.html")
