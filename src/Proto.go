@@ -81,8 +81,7 @@ func (s *ProtoHTTP) ReturnData(data string) {
 func (s *ProtoHTTP) MakeResponse(request string, rpw *bufio.Writer) string {
 	s.returnData = ""
 	tOut, Max := s.LTData.GetLifeTime()
-	ParsedRequestInit := &http.Request{URL: &url.URL{}}
-	rp := HTTPRespHandler{RawReq: request, ParsedReq: ParsedRequestInit, DQ: s, TimeOut: tOut, MaxRequests: Max}
+	rp := HTTPRespHandler{RawReq: request, ParsedReq: &http.Request{URL: &url.URL{}}, DQ: s, TimeOut: tOut, MaxRequests: Max}
 	rp.Header.hMap = make(map[string]string)
 	rp.ReadReqString()
 	rp.GetResponseBody()
@@ -125,6 +124,7 @@ func (s *HTTPRespHandler) GetResponseBody() {
 		s.Status = fullStatusCode[404]
 		s.ResponseBody = v.RespMethod.(func() []byte)()
 	} else { //200 ok
+		s.Status = fullStatusCode[200]
 		switch v.RespMethodID {
 		case "file":
 			s.ResponseBody = v.RespMethod.(func() []byte)()

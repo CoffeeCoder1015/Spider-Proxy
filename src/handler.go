@@ -43,25 +43,26 @@ func (s Handler) handle(connection net.Conn) {
 	fmt.Println("#SYS Connection:", connection.RemoteAddr().String(), "GoRoutine:", handlerID, time.Now())
 	rw := bufio.NewReadWriter(bufio.NewReader(connection), bufio.NewWriter(connection))
 
-	TransferBuf := new(bytes.Buffer)
-	tlsConn := tls.Server(tempConn{Conn: connection, reader: io.TeeReader(connection, TransferBuf)}, &s.tlsConfig)
+	DataBuf, Reqerr := BufioReadFull(rw.Reader)
+	if Reqerr != nil {
+		log.Println("Error! GoRoutine:  -", handlerID, " > Request Error > ", Reqerr)
+	}
+	tlsConn := tls.Server(tempConn{Conn: connection, Reader: io.MultiReader(&tempReader{data: DataBuf}, connection)}, &s.tlsConfig)
 	err := tlsConn.Handshake()
 
 	ConnOpen := true
 
+	//Error Based determiner -  if err on making handshake, noTLS response is made, else switch ReadWriter to tls obj
 	if err != nil {
-		fmt.Println("Err on initalising TLS >", err)
-		Data, breadFullErr := BufioReadFull(*bufio.NewReader(connection))
-		if breadFullErr != nil {
-			log.Println("FR Err >", breadFullErr)
-		}
-		TransferBuf.Write(Data)
-		intCom := s.HandlingInterface.MakeResponse(TransferBuf.String(), rw.Writer)
+		fmt.Println("NO TLS >", err)
+		fmt.Println(DataBuf)
+		intCom := s.HandlingInterface.MakeResponse(string(DataBuf), rw.Writer)
 		s.requestsLeft--
 		if intCom == "CClose" {
 			ConnOpen = false
 		}
 	} else {
+		fmt.Println("YES TLS")
 		connection = tlsConn
 		rw = bufio.NewReadWriter(bufio.NewReader(connection), bufio.NewWriter(connection))
 	}
@@ -72,14 +73,14 @@ func (s Handler) handle(connection net.Conn) {
 	reqChan := make(chan string)
 	for ConnOpen {
 		go func() {
-			DataBuf, Reqerr := BufioReadFull(*rw.Reader)
+			DataBuf, Reqerr := BufioReadFull(rw.Reader)
 			if !ConnOpen {
 				return
 			}
 			if Reqerr != nil {
 				log.Println("Error! GoRoutine:  -", handlerID, " > Request Error > ", Reqerr)
 			} else {
-				reqChan <- string(DataBuf)
+				reqChan <- DataBuf
 			}
 		}()
 		select {
@@ -103,24 +104,22 @@ func (s Handler) handle(connection net.Conn) {
 	fmt.Println(strings.Repeat("-", 50))
 }
 
-func BufioReadFull(r bufio.Reader) ([]byte, error) {
+func BufioReadFull(r *bufio.Reader) (string, error) {
 	DataBuf := make([]byte, r.Size())
-	_, Reqerr := r.Read(DataBuf)
-	if dInBuf := r.Buffered(); dInBuf > 0 {
-		dataInBuffer, pkErr := r.Peek(r.Buffered())
-		if pkErr != nil {
-			log.Println("Peek Error > ", pkErr)
+	rl, ReadErr := r.Read(DataBuf)
+	if ReadErr == nil {
+		dInBuf := r.Buffered()
+		if dInBuf > 0 {
+			dataInBuffer, pkErr := r.Peek(dInBuf)
+			if pkErr != nil {
+				log.Println("Peek Error > ", pkErr)
+			}
+			DataBuf = append(DataBuf, dataInBuffer...)
+			r.Discard(dInBuf)
 		}
-		DataBuf = append(DataBuf, dataInBuffer...)
-		r.Discard(r.Buffered())
+		return string(DataBuf[:rl+dInBuf]), nil
 	}
-	return DataBuf, Reqerr
-}
-
-//Renamed code from erros.New to generate errors
-//To get a Error value
-func CreateError(text string) *CustomError {
-	return &CustomError{s: text}
+	return "", ReadErr
 }
 
 //struct that is needed to carry the Error info
@@ -129,16 +128,26 @@ type CustomError struct {
 }
 
 // Defined in *builtins* that a error type is interface w/ function: Error() string
-func (s *CustomError) Error() string {
-	return s.s
+func (s *CustomError) Error() string { return s.s }
+
+//Renamed code from erros.New to generate errors
+//To get a Error value
+func CreateError(text string) *CustomError {
+	return &CustomError{s: text}
 }
 
 type tempConn struct {
 	net.Conn
-	reader io.Reader
+	Reader io.Reader
 }
 
-func (conn tempConn) Read(p []byte) (int, error) { return conn.reader.Read(p) }
+func (conn tempConn) Read(p []byte) (int, error) { return conn.Reader.Read(p) }
+
+type tempReader struct {
+	data string
+}
+
+func (s *tempReader) Read(p []byte) (n int, err error) { return copy(p, []byte(s.data)), io.EOF }
 
 //debug
 func getGID() uint64 {
