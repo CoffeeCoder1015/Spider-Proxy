@@ -108,10 +108,9 @@ func (s *HTTPRespHandler) ReadReqString() error {
 		log.Println("ERR parsing request >", err)
 		s.Status = fullStatusCode[400]
 		s.ParsedReq.URL.Path = "BR"
-		return CreateError("Cannot parse HTTPS encrypted request")
-	} else {
-		s.ParsedReq = req
+		return CreateError("Cannot parse request")
 	}
+	s.ParsedReq = req
 	return nil
 }
 
