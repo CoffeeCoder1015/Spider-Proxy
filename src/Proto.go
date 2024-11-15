@@ -50,7 +50,7 @@ func (s *ProtoHTTP) HandleFile(route string, path string) {
 }
 
 //HandleFunc
-//Respond with custom code -- intended for comples operation, more generally used for POST requests
+//Respond with custom code -- intended for complex operation, more generally used for POST requests
 func (s *ProtoHTTP) HandleFunc(route string, hfunc func(req *http.Request) []byte) {
 	s.RouteMap[route] = respondMethod{RespMethodID: "general", RespMethod: hfunc}
 }

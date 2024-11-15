@@ -50,5 +50,5 @@ func main() {
 		})
 		s.HTTP.ResponseHeaderOveride(HeaderManip{Field: "Server", Value: "Spider Proxy alph v1 (Powered by Spider Server alpha v2.3)"})
 	*/
-	s.TCPServer("", 8080)
+	s.TCPServer("127.0.0.1", 80)
 }

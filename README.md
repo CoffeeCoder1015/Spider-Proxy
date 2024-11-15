@@ -1,2 +1,2 @@
 # Spider-Proxy
- multipurpose server
+manually implemented HTTP on the go TCP stdlib for learning purposes
